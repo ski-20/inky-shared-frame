@@ -1,0 +1,12 @@
+# Secrets
+.env
+*.env
+state.json
+
+# Python
+__pycache__/
+*.pyc
+inkyenv/
+
+# OS junk
+.DS_Store
