@@ -34,6 +34,7 @@ sudo reboot
 
 3️⃣ Install System Dependencies
 
+sudo apt update
 sudo apt install -y \
   git \
   python3 \
@@ -47,30 +48,42 @@ sudo apt install -y \
 4️⃣ Enable SPI (Required for Inky)
 
 sudo raspi-config
+sudo reboot
 
+# confirm spi dev exists with:
+ls /dev/spidev*
 
 5️⃣ Clone Repository
 
 #add deploy key
 ssh-keygen -t ed25519 -C "inkyframe-readonly" #gnereate key
+# Press Enter for defaults (creates ~/.ssh/id_ed25519)
 cat ~/.ssh/id_ed25519.pub #copy to github
 ssh -T git@github.com #conenct to github
 
-#clone repo
+
+6️⃣ clone repo
+
 cd ~
 git clone git@github.com:ski-20/inky-shared-frame.git
-cd inkyframe
+cd inky-shared-frame
 
 
-6️⃣ Create Python Virtual Environment
+7️⃣ Create Python Virtual Environment
 
 python3 -m venv inkyenv
 source inkyenv/bin/activate
 pip install --upgrade pip
 pip install pillow inky pyicloud
 
+#confirm if gpio is accesible from the venv
+python - << 'EOF'
+import RPi.GPIO as GPIO
+print("RPi.GPIO OK")
+EOF
 
-7️⃣ Create Runtime Environment File
+
+8️⃣ Create Runtime Environment File
 
 cp .env.example .env
 nano .env
@@ -79,22 +92,29 @@ ICLOUD_PASSWORD=yourpassword
 ICLOUD_FOLDER=InkyFrame
 LOCAL_PHOTO_DIR=/home/lu/photos
 PYICLOUD_NO_KEYRING=1
+STATE_FILE=/home/lu/.inkyframe_state.json
 
 
-8️⃣ Create Local Photo Directory
+9️⃣ Create Local Photo Directory
 
 mkdir -p /home/lu/photos
 
 
-9️⃣ First Manual Test (Recommended)
+🔟 First Manual Test (required for apple 2FA)
 
+cd ~/inky-shared-frame
 source inkyenv/bin/activate
-python src/photos_sync.py
-ls /home/lu/photos
-python src/frame.py
+
+set -a
+source .env
+set +a
+
+python frame/photos_sync.py
+ls -la "$LOCAL_PHOTO_DIR"
+python frame/frame.py
 
 
-🔟 Install Systemd Service
+1️⃣1️⃣ Install Systemd Service
 
 sudo cp systemd/inky-frame.service /etc/systemd/system/inky-frame.service
 sudo systemctl daemon-reload
