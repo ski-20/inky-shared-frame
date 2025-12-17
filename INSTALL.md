@@ -109,9 +109,17 @@ set -a
 source .env
 set +a
 
-python frame/photos_sync.py
-ls -la "$LOCAL_PHOTO_DIR"
-python frame/frame.py
+python
+
+  from pyicloud import PyiCloudService
+  import os
+
+  api = PyiCloudService(
+      os.environ["ICLOUD_EMAIL"],
+      os.environ["ICLOUD_PASSWORD"]
+  )
+
+  api.requires_2fa
 
 
 1️⃣1️⃣ Install Systemd Service

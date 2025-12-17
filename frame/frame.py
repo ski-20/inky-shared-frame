@@ -1,129 +1,259 @@
-import os, time, json, random, threading, subprocess
-from pathlib import Path
+#!/usr/bin/env python3
+
+import os
+import time
+import json
+import random
+import threading
+import subprocess
 from datetime import datetime, timedelta
-from inky.auto import auto
-from PIL import Image
+from pathlib import Path
+
 import RPi.GPIO as GPIO
+from inky.auto import auto
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+
+# --------------------
+# ENVIRONMENT
+# --------------------
 
 PHOTO_DIR = Path(os.environ["LOCAL_PHOTO_DIR"])
 STATE_FILE = Path(os.environ["STATE_FILE"])
+PYTHON_BIN = str(Path("inkyenv/bin/python").resolve())
+SYNC_SCRIPT = str(Path(__file__).parent / "photos_sync.py")
+
+# --------------------
+# GPIO (BCM)
+# --------------------
 
 BUTTON_A = 5
-MAX_HISTORY = 10
+BUTTON_B = 6
+BUTTON_C = 16
+BUTTON_D = 25
 
-# ---------- Logging ----------
-def log(msg):
+# --------------------
+# IMAGE CONFIG
+# --------------------
+
+INKY_SIZE = (1600, 1200)
+
+# --------------------
+# LOGGING
+# --------------------
+
+def log(msg: str):
     print(f"[{datetime.now().isoformat(timespec='seconds')}] {msg}", flush=True)
 
-# ---------- State ----------
+# --------------------
+# STATE
+# --------------------
+
 def load_state():
-    if STATE_FILE.exists():
-        return json.loads(STATE_FILE.read_text())
-    return {"seen": [], "last_shown": {}, "history": []}
+    default = {
+        "seen": [],
+        "unseen_new": [],
+        "style": "normal"
+    }
+
+    if not STATE_FILE.exists():
+        log("STATE: No state file found — creating fresh state")
+        save_state(default)
+        return default
+
+    try:
+        state = json.loads(STATE_FILE.read_text())
+    except Exception as e:
+        log(f"STATE ERROR: Failed to read state file — {e}")
+        log("STATE: Resetting to defaults")
+        save_state(default)
+        return default
+
+    # Validate keys
+    changed = False
+    for key, value in default.items():
+        if key not in state:
+            log(f"STATE WARNING: Missing key '{key}' — restoring default")
+            state[key] = value
+            changed = True
+
+    if changed:
+        save_state(state)
+
+    return state
 
 def save_state(state):
     STATE_FILE.write_text(json.dumps(state, indent=2))
 
-# ---------- Images ----------
+# --------------------
+# IMAGE PROCESSING
+# --------------------
+
+def preprocess_normal(img):
+    img = img.convert("RGB")
+    img = ImageOps.fit(img, INKY_SIZE, Image.LANCZOS)
+    img = ImageEnhance.Contrast(img).enhance(1.6)
+    img = ImageEnhance.Color(img).enhance(1.25)
+    img = img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=120, threshold=3))
+    return img
+
+def preprocess_posterize(img):
+    img = preprocess_normal(img)
+    return ImageOps.posterize(img, bits=4)
+
+def preprocess_painterly(img):
+    img = preprocess_normal(img)
+    img = img.filter(ImageFilter.ModeFilter(size=3))
+    img = img.filter(ImageFilter.SMOOTH_MORE)
+    return img
+
+def preprocess(img, style):
+    if style == "posterize":
+        return preprocess_posterize(img)
+    if style == "painterly":
+        return preprocess_painterly(img)
+    return preprocess_normal(img)
+
+# --------------------
+# IMAGE SELECTION
+# --------------------
+
 def list_images():
-    images = [
-        p.name for p in PHOTO_DIR.iterdir()
-        if p.suffix.lower() in (".jpg", ".jpeg", ".png")
-    ]
-    log(f"Found {len(images)} images")
-    return sorted(images)
+    return sorted(p.name for p in PHOTO_DIR.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"})
 
 def choose_next_image(state, images):
-    now = time.time()
-    unseen = [img for img in images if img not in state["seen"]]
-
+    unseen = [i for i in state["unseen_new"] if i in images]
     if unseen:
-        choice = random.choice(unseen)
-        log(f"Choosing unseen image: {choice}")
-    else:
-        candidates = [i for i in state["seen"] if i not in state["history"]]
-        if not candidates:
-            candidates = state["seen"]
-        weights = [now - state["last_shown"].get(i, 0) for i in candidates]
-        choice = random.choices(candidates, weights=weights, k=1)[0]
-        log(f"Choosing weighted image: {choice}")
+        chosen = unseen.pop(0)
+        state["unseen_new"] = unseen
+        state["seen"].append(chosen)
+        save_state(state)
+        return chosen
 
-    state["seen"].append(choice) if choice not in state["seen"] else None
-    state["last_shown"][choice] = now
-    state["history"] = (state["history"] + [choice])[-MAX_HISTORY:]
-    save_state(state)
-    return choice
+    weights = [5 if img not in state["seen"] else 1 for img in images]
+    chosen = random.choices(images, weights=weights, k=1)[0]
 
-# ---------- Display ----------
-def show_image(inky, path):
+    if chosen not in state["seen"]:
+        state["seen"].append(chosen)
+        save_state(state)
+
+    return chosen
+
+# --------------------
+# DISPLAY
+# --------------------
+
+def show_image(inky, path, state):
     try:
-        img = Image.open(path).convert("RGB")
-
-        if img.width > img.height:
-            img = img.rotate(90, expand=True)
-
-        img.thumbnail((inky.width, inky.height), Image.LANCZOS)
-
-        canvas = Image.new("RGB", (inky.width, inky.height), "white")
-        x = (inky.width - img.width) // 2
-        y = (inky.height - img.height) // 2
-        canvas.paste(img, (x, y))
-
-        inky.set_image(canvas)
+        log(f"Displaying {path.name} [{state['style']}]")
+        img = Image.open(path)
+        img = preprocess(img, state["style"])
+        inky.set_image(img)
         inky.show()
-
-        log(f"Displayed image: {path.name}")
-        return True
-
     except Exception as e:
-        log(f"ERROR displaying {path.name}: {e}")
-        return False
+        log(f"ERROR displaying image {path.name}: {e}")
 
-# ---------- Sync ----------
+# --------------------
+# SYNC
+# --------------------
+
 def sync_photos():
     log("SYNC STARTED")
-    before = len(list_images())
+
+    before = set(list_images())
 
     result = subprocess.run(
-        ["/home/lu/inkyenv/bin/python", "/home/lu/inkyframe/photos_sync.py"],
+        [PYTHON_BIN, SYNC_SCRIPT],
         capture_output=True,
         text=True
     )
 
-    log(result.stdout.strip())
-    if result.stderr:
-        log(f"SYNC STDERR: {result.stderr.strip()}")
+    if result.stdout:
+        log(result.stdout.strip())
 
-    after = len(list_images())
-    log(f"SYNC COMPLETE — images before={before}, after={after}")
+    if result.returncode != 0:
+        log(f"SYNC FAILED — exit={result.returncode}")
+        if result.stderr:
+            log(f"SYNC STDERR: {result.stderr.strip()}")
+        return False, [], []
 
-# ---------- Timing ----------
+    after = set(list_images())
+    new_images = sorted(after - before)
+    deleted_images = sorted(before - after)
+
+    log(f"SYNC COMPLETE — added={len(new_images)}, removed={len(deleted_images)}")
+
+    return True, deleted_images, new_images
+
+# --------------------
+# TIME
+# --------------------
+
 def next_midnight():
-    now = datetime.now()
-    return datetime.combine(now.date() + timedelta(days=1), datetime.min.time())
+    tomorrow = datetime.now() + timedelta(days=1)
+    return datetime.combine(tomorrow.date(), datetime.min.time())
 
-# ---------- Buttons ----------
+# --------------------
+# BUTTON THREAD
+# --------------------
+
 def button_thread(inky, state):
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(BUTTON_A, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-    log("Button thread started")
-
     while True:
         if GPIO.input(BUTTON_A) == GPIO.LOW:
             log("BUTTON A PRESSED — NEXT IMAGE")
-
             images = list_images()
             if images:
                 chosen = choose_next_image(state, images)
-                show_image(inky, PHOTO_DIR / chosen)
+                show_image(inky, PHOTO_DIR / chosen, state)
+            time.sleep(1)
 
-            time.sleep(0.6)
+        elif GPIO.input(BUTTON_B) == GPIO.LOW:
+            log("BUTTON B PRESSED — MANUAL SYNC")
+
+            success, _, new = sync_photos()
+
+            if success:
+                if new:
+                    state["unseen_new"].extend(new)
+                    save_state(state)
+                    log(f"{len(new)} new images queued")
+                else:
+                    log("No new images — forcing refresh")
+
+                images = list_images()
+                if images:
+                    chosen = choose_next_image(state, images)
+                    show_image(inky, PHOTO_DIR / chosen, state)
+
+                log("MANUAL SYNC COMPLETE")
+            else:
+                log("MANUAL SYNC FAILED — NO REFRESH")
+
+            time.sleep(1)
+
+        elif GPIO.input(BUTTON_C) == GPIO.LOW:
+            state["style"] = "posterize"
+            save_state(state)
+            log("BUTTON C — STYLE = POSTERIZE")
+            time.sleep(1)
+
+        elif GPIO.input(BUTTON_D) == GPIO.LOW:
+            state["style"] = "painterly"
+            save_state(state)
+            log("BUTTON D — STYLE = PAINTERLY")
+            time.sleep(1)
+
         time.sleep(0.1)
 
-# ---------- Main ----------
+# --------------------
+# MAIN
+# --------------------
+
 def main():
     log("FRAME MAIN LOOP STARTED")
+
+    GPIO.setmode(GPIO.BCM)
+    for pin in (BUTTON_A, BUTTON_B, BUTTON_C, BUTTON_D):
+        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
     inky = auto()
     state = load_state()
@@ -131,7 +261,7 @@ def main():
     images = list_images()
     if images:
         chosen = choose_next_image(state, images)
-        show_image(inky, PHOTO_DIR / chosen)
+        show_image(inky, PHOTO_DIR / chosen, state)
 
     threading.Thread(
         target=button_thread,
@@ -144,15 +274,29 @@ def main():
 
     while True:
         if datetime.now() >= next_update:
-            sync_photos()
-            images = list_images()
-            if images:
-                chosen = choose_next_image(state, images)
-                show_image(inky, PHOTO_DIR / chosen)
+            success, _, new = sync_photos()
+
+            if success:
+                if new:
+                    state["unseen_new"].extend(new)
+                    save_state(state)
+                    log(f"{len(new)} new images added to unseen pool")
+                else:
+                    log("No new images — forcing refresh")
+
+                images = list_images()
+                if images:
+                    chosen = choose_next_image(state, images)
+                    show_image(inky, PHOTO_DIR / chosen, state)
+            else:
+                log("Midnight sync failed — skipping refresh")
+
             next_update = next_midnight()
             log(f"Next scheduled update at {next_update}")
 
         time.sleep(30)
+
+# --------------------
 
 if __name__ == "__main__":
     main()
