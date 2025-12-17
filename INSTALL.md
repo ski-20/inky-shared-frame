@@ -41,8 +41,7 @@ sudo apt install -y \
   python3-pip \
   python3-rpi.gpio \
   libjpeg-dev \
-  libopenjp2-7 \
-  libatlas-base-dev
+  libopenjp2-7
 
 
 4️⃣ Enable SPI (Required for Inky)
@@ -52,8 +51,14 @@ sudo raspi-config
 
 5️⃣ Clone Repository
 
+#add deploy key
+ssh-keygen -t ed25519 -C "inkyframe-readonly" #gnereate key
+cat ~/.ssh/id_ed25519.pub #copy to github
+ssh -T git@github.com #conenct to github
+
+#clone repo
 cd ~
-git clone https://github.com/YOUR_ORG/inkyframe.git
+git clone git@github.com:ski-20/inky-shared-frame.git
 cd inkyframe
 
 
