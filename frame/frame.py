@@ -90,12 +90,11 @@ def save_state(state):
 # --------------------
 
 def normalize_orientation(img):
-    # Respect EXIF orientation
     img = ImageOps.exif_transpose(img)
 
-    # Force portrait
     w, h = img.size
     if w > h:
+        log(f"Auto-rotating image to portrait ({w}x{h})")
         img = img.rotate(90, expand=True)
 
     return img
