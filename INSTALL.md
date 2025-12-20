@@ -73,15 +73,6 @@ cd inky-shared-frame
 
 python3 -m venv inkyenv
 source inkyenv/bin/activate
-pip install --upgrade pip
-pip install pillow inky pyicloud
-
-#confirm if gpio is accesible from the venv
-python - << 'EOF'
-import RPi.GPIO as GPIO
-print("RPi.GPIO OK")
-EOF
-
 
 8️⃣ Create Runtime Environment File
 
@@ -93,6 +84,10 @@ ICLOUD_FOLDER=InkyFrame
 LOCAL_PHOTO_DIR=/home/lu/photos
 PYICLOUD_NO_KEYRING=1
 STATE_FILE=/home/lu/.inkyframe_state.json
+
+sudo cp /home/lu/inky-shared-frame/.env /etc/inky-frame.env
+sudo chown root:root /etc/inky-frame.env
+sudo chmod 600 /etc/inky-frame.env
 
 
 9️⃣ Create Local Photo Directory
@@ -109,17 +104,43 @@ set -a
 source .env
 set +a
 
-python
+python #then paste below
 
-  from pyicloud import PyiCloudService
-  import os
+from pyicloud import PyiCloudService
+import os
 
-  api = PyiCloudService(
-      os.environ["ICLOUD_EMAIL"],
-      os.environ["ICLOUD_PASSWORD"]
-  )
+api = PyiCloudService(
+    os.environ["ICLOUD_EMAIL"],
+    os.environ["ICLOUD_PASSWORD"]
+)
 
-  api.requires_2fa
+print("Logged in")
+
+if api.requires_2fa:
+    print("2FA required.")
+    code = input("Enter the 2FA code sent to your Apple device: ")
+    if api.validate_2fa_code(code):
+        print("2FA validation successful.")
+    else:
+        print("2FA validation failed.")
+else:
+    print("No 2FA required.")
+
+print("Attempting Photos access…")
+_ = api.photos
+print("Photos access OK.")
+EOF
+
+pip install --upgrade pip
+pip install pillow inky pyicloud
+
+#confirm if gpio is accesible from the venv
+python - << 'EOF'
+import RPi.GPIO as GPIO
+print("RPi.GPIO OK")
+EOF
+
+exit
 
 
 1️⃣1️⃣ Install Systemd Service
