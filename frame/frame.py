@@ -30,7 +30,7 @@ SYNC_SCRIPT = str(Path(__file__).parent / "photos_sync.py")
 BUTTON_A = 5
 BUTTON_B = 6
 BUTTON_C = 25
-BUTTON_D = 26
+BUTTON_D = 24
 
 # --------------------
 # IMAGE CONFIG
