@@ -200,10 +200,15 @@ def button_thread(inky, state):
     while True:
         if GPIO.input(BUTTON_A) == GPIO.LOW:
             log("BUTTON A PRESSED — NEXT IMAGE")
+
             images = list_images()
+            log(f"BUTTON A: found {len(images)} images")
+
             if images:
                 chosen = choose_next_image(state, images)
+                log(f"BUTTON A: chosen image = {chosen}")
                 show_image(inky, PHOTO_DIR / chosen, state)
+
             time.sleep(1)
 
         elif GPIO.input(BUTTON_B) == GPIO.LOW:
