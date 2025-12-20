@@ -90,18 +90,7 @@ def save_state(state):
 # IMAGE PROCESSING
 # --------------------
 
-def normalize_orientation(img):
-    img = ImageOps.exif_transpose(img)
-
-    w, h = img.size
-    if w > h:
-        log(f"Auto-rotating image to portrait ({w}x{h})")
-        img = img.rotate(90, expand=True)
-
-    return img
-
 def preprocess_normal(img):
-    img = normalize_orientation(img)
     img = img.convert("RGB")
     img = ImageOps.fit(img, INKY_LOGICAL_SIZE, Image.LANCZOS)
     img = ImageEnhance.Contrast(img).enhance(1.6)
@@ -160,7 +149,7 @@ def show_image(inky, path, state):
         log(f"Displaying {path.name} [{state['style']}]")
         img = Image.open(path)
         img = preprocess(img, state["style"])
-        img = img.rotate(-90, expand=True)
+        img = img.rotate(90, expand=True)
         img = ImageOps.fit(img, INKY_PHYSICAL_SIZE, Image.LANCZOS)
         inky.set_image(img)
         inky.show()
