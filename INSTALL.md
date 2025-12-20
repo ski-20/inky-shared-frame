@@ -45,7 +45,7 @@ sudo apt install -y \
   libopenjp2-7
 
 
-4️⃣ Enable SPI (Required for Inky)
+4️⃣ Enable SPI & i2c (Required for Inky)
 
 sudo raspi-config
 sudo reboot
