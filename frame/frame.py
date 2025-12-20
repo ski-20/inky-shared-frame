@@ -89,7 +89,19 @@ def save_state(state):
 # IMAGE PROCESSING
 # --------------------
 
+def normalize_orientation(img):
+    # Respect EXIF orientation
+    img = ImageOps.exif_transpose(img)
+
+    # Force portrait
+    w, h = img.size
+    if w > h:
+        img = img.rotate(90, expand=True)
+
+    return img
+
 def preprocess_normal(img):
+    img = normalize_orientation(img)
     img = img.convert("RGB")
     img = ImageOps.fit(img, INKY_SIZE, Image.LANCZOS)
     img = ImageEnhance.Contrast(img).enhance(1.6)
