@@ -36,7 +36,7 @@ BUTTON_D = 24
 # IMAGE CONFIG
 # --------------------
 
-INKY_SIZE = (1600, 1200)
+INKY_SIZE = (1200, 1600)
 
 # --------------------
 # LOGGING
