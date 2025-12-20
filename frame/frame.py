@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import sys
 import time
 import json
 import random
@@ -19,7 +20,7 @@ from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 PHOTO_DIR = Path(os.environ["LOCAL_PHOTO_DIR"])
 STATE_FILE = Path(os.environ["STATE_FILE"])
-PYTHON_BIN = str(Path("inkyenv/bin/python").resolve())
+PYTHON_BIN = sys.executable
 SYNC_SCRIPT = str(Path(__file__).parent / "photos_sync.py")
 
 # --------------------
