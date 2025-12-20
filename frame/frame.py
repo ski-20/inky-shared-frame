@@ -36,7 +36,8 @@ BUTTON_D = 24
 # IMAGE CONFIG
 # --------------------
 
-INKY_SIZE = (1200, 1600)
+INKY_LOGICAL_SIZE = (1200, 1600)   # portrait
+INKY_PHYSICAL_SIZE = (1600, 1200)  # required by Inky
 
 # --------------------
 # LOGGING
@@ -102,7 +103,7 @@ def normalize_orientation(img):
 def preprocess_normal(img):
     img = normalize_orientation(img)
     img = img.convert("RGB")
-    img = ImageOps.fit(img, INKY_SIZE, Image.LANCZOS)
+    img = ImageOps.fit(img, INKY_LOGICAL_SIZE, Image.LANCZOS)
     img = ImageEnhance.Contrast(img).enhance(1.6)
     img = ImageEnhance.Color(img).enhance(1.25)
     img = img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=120, threshold=3))
@@ -159,6 +160,8 @@ def show_image(inky, path, state):
         log(f"Displaying {path.name} [{state['style']}]")
         img = Image.open(path)
         img = preprocess(img, state["style"])
+        img = img.rotate(-90, expand=True)
+        img = ImageOps.fit(img, INKY_PHYSICAL_SIZE, Image.LANCZOS)
         inky.set_image(img)
         inky.show()
     except Exception as e:
