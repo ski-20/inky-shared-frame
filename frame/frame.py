@@ -255,6 +255,8 @@ def button_thread(inky, state):
 
 def main():
     log("FRAME MAIN LOOP STARTED")
+    log(f"PHOTO_DIR = {PHOTO_DIR}")
+    log(f"PHOTO_DIR exists = {PHOTO_DIR.exists()}")
 
     GPIO.setmode(GPIO.BCM)
     for pin in (BUTTON_A, BUTTON_B, BUTTON_C, BUTTON_D):
