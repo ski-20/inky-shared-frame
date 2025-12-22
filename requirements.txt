@@ -1,3 +1,4 @@
 pyicloud
 Pillow
 inky
+pillow-heif

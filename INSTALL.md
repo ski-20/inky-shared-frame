@@ -42,7 +42,8 @@ sudo apt install -y \
   python3-pip \
   python3-rpi.gpio \
   libjpeg-dev \
-  libopenjp2-7
+  libopenjp2-7 \
+  libheif-dev
 
 
 4️⃣ Enable SPI & i2c (Required for Inky)
@@ -104,7 +105,7 @@ mkdir -p /home/lu/photos
 🔟 ICloud access setup (required for apple 2FA)
 
 pip install --upgrade pip
-pip install pillow inky pyicloud
+pip install pillow pillow-heif pyicloud inky
 
 cd ~/inky-shared-frame
 source inkyenv/bin/activate
