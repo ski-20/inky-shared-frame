@@ -80,16 +80,20 @@ source inkyenv/bin/activate
 
 cp .env.example .env
 nano .env
+
 ICLOUD_EMAIL=your@email.com
 ICLOUD_PASSWORD=yourpassword
 ICLOUD_FOLDER=InkyFrame
 LOCAL_PHOTO_DIR=/home/lu/photos
-PYICLOUD_NO_KEYRING=1
 STATE_FILE=/home/lu/.inkyframe_state.json
+PYICLOUD_COOKIE_DIRECTORY=/home/lu/.pyicloud
 
 sudo cp /home/lu/inky-shared-frame/.env /etc/inky-frame.env
 sudo chown root:root /etc/inky-frame.env
 sudo chmod 600 /etc/inky-frame.env
+sudo -u lu mkdir -p /home/lu/.pyicloud
+sudo -u lu chmod 700 /home/lu/.pyicloud
+sudo -u lu rm -rf /home/lu/.pyicloud/*
 
 
 9️⃣ Create Local Photo Directory
@@ -104,19 +108,22 @@ pip install pillow inky pyicloud
 
 cd ~/inky-shared-frame
 source inkyenv/bin/activate
-
 set -a
 source .env
 set +a
-
 python #then paste below
 
 from pyicloud import PyiCloudService
 import os
 
+cookie_dir = os.environ.get("PYICLOUD_COOKIE_DIRECTORY", "/home/lu/.pyicloud")
+
+print("Using cookie dir:", cookie_dir)
+
 api = PyiCloudService(
     os.environ["ICLOUD_EMAIL"],
-    os.environ["ICLOUD_PASSWORD"]
+    os.environ["ICLOUD_PASSWORD"],
+    cookie_directory=cookie_dir
 )
 
 print("Logged in")
@@ -134,8 +141,6 @@ else:
 print("Attempting Photos access…")
 _ = api.photos
 print("Photos access OK.")
-EOF
-
 
 
 #confirm if gpio is accesible from the venv
