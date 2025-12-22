@@ -109,7 +109,7 @@ skipped = 0
 failed = 0
 
 for asset in album.photos:
-    asset_id = asset.id
+    asset_id = asset.id.replace("/", "_")
 
     if asset_id in known_assets:
         skipped += 1
