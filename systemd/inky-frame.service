@@ -1,14 +1,20 @@
 [Unit]
 Description=Inky Shared Album Photo Frame
 After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=lu
+WorkingDirectory=/home/lu/inky-shared-frame
 EnvironmentFile=/etc/inky-frame.env
-ExecStart=/home/lu/inkyenv/bin/python -u /home/lu/inkyframe/frame.py
+
+ExecStart=/home/lu/inky-shared-frame/inkyenv/bin/python \
+          -u /home/lu/inky-shared-frame/frame/frame.py
+
 Restart=always
 RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
+

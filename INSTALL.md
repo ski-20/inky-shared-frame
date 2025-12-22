@@ -47,7 +47,7 @@ sudo apt install -y \
 
 4️⃣ Enable SPI & i2c (Required for Inky)
 
-sudo raspi-config
+sudo raspi-config #enable SPI &i2c
 sudo reboot
 
 # confirm spi dev exists with:
@@ -71,7 +71,9 @@ cd inky-shared-frame
 
 7️⃣ Create Python Virtual Environment
 
-python3 -m venv inkyenv
+IMPORTANT: RPi.GPIO is installed system-wide and must be visible inside the venv.
+
+python3 -m venv inkyenv --system-site-packages
 source inkyenv/bin/activate
 
 8️⃣ Create Runtime Environment File
@@ -95,7 +97,10 @@ sudo chmod 600 /etc/inky-frame.env
 mkdir -p /home/lu/photos
 
 
-🔟 First Manual Test (required for apple 2FA)
+🔟 ICloud access setup (required for apple 2FA)
+
+pip install --upgrade pip
+pip install pillow inky pyicloud
 
 cd ~/inky-shared-frame
 source inkyenv/bin/activate
@@ -131,8 +136,7 @@ _ = api.photos
 print("Photos access OK.")
 EOF
 
-pip install --upgrade pip
-pip install pillow inky pyicloud
+
 
 #confirm if gpio is accesible from the venv
 python - << 'EOF'
@@ -145,6 +149,7 @@ exit
 
 1️⃣1️⃣ Install Systemd Service
 
+cd ~/inky-shared-frame/
 sudo cp systemd/inky-frame.service /etc/systemd/system/inky-frame.service
 sudo systemctl daemon-reload
 sudo systemctl enable inky-frame
