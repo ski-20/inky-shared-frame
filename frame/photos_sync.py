@@ -47,7 +47,7 @@ def save_state(state):
     STATE_FILE.write_text(json.dumps(state, indent=2))
 
 state = load_state()
-known_assets = state["assets"]
+known_assets = state.setdefault("assets", {})
 
 # ------------------------------------------------------------------
 # Connect to iCloud 
