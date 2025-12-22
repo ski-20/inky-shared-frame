@@ -1,57 +1,31 @@
-#!/usr/bin/env python3
 import os
 import sys
-import json
 from pathlib import Path
-from pyicloud import PyiCloudService
 from datetime import datetime
+from pyicloud import PyiCloudService
+
 from PIL import Image
+import pillow_heif
 
-# HEIC support
-from pillow_heif import register_heif_opener
-register_heif_opener()
+pillow_heif.register_heif_opener()
 
-# ------------------------------------------------------------------
-# Environment
-# ------------------------------------------------------------------
 PHOTO_DIR = Path(os.environ["LOCAL_PHOTO_DIR"])
 ALBUM_NAME = os.environ["ICLOUD_FOLDER"]
-STATE_FILE = Path(os.environ["STATE_FILE"])
+STATE_FILE = Path(os.environ.get("STATE_FILE", "/home/lu/.inkyframe_state.json"))
 COOKIE_DIR = os.environ.get("PYICLOUD_COOKIE_DIRECTORY", "/home/lu/.pyicloud")
+
+
+def log(msg):
+    print(f"[{datetime.now().isoformat(timespec='seconds')}] {msg}", flush=True)
+
 
 PHOTO_DIR.mkdir(parents=True, exist_ok=True)
 
-# ------------------------------------------------------------------
-# Logging
-# ------------------------------------------------------------------
-def log(msg):
-    print(
-        f"[{datetime.now().isoformat(timespec='seconds')}] {msg}",
-        flush=True
-    )
-
 log("Starting iCloud photo sync")
 
-# ------------------------------------------------------------------
-# State (asset-ID based)
-# ------------------------------------------------------------------
-def load_state():
-    if not STATE_FILE.exists():
-        return {"assets": {}}
-    try:
-        return json.loads(STATE_FILE.read_text())
-    except Exception:
-        return {"assets": {}}
-
-def save_state(state):
-    STATE_FILE.write_text(json.dumps(state, indent=2))
-
-state = load_state()
-known_assets = state.setdefault("assets", {})
-
-# ------------------------------------------------------------------
-# Connect to iCloud 
-# ------------------------------------------------------------------
+# -----------------------------
+# Connect to iCloud
+# -----------------------------
 try:
     api = PyiCloudService(
         os.environ["ICLOUD_EMAIL"],
@@ -63,18 +37,18 @@ except Exception as e:
     log(f"FATAL: Failed to initialize iCloud client: {e}")
     sys.exit(1)
 
-# ------------------------------------------------------------------
+# -----------------------------
 # Access Photos service
-# ------------------------------------------------------------------
+# -----------------------------
 try:
     photos = api.photos
 except Exception as e:
     log(f"FATAL: Unable to access Photos service: {e}")
     sys.exit(1)
 
-# ------------------------------------------------------------------
+# -----------------------------
 # Locate shared album
-# ------------------------------------------------------------------
+# -----------------------------
 album = None
 for stream in photos.shared_streams:
     if stream.title == ALBUM_NAME:
@@ -87,103 +61,84 @@ if not album:
 
 log(f"Found shared album: {ALBUM_NAME}")
 
-# ------------------------------------------------------------------
-# Phase 1: Enumerate source (ASSET IDS)
-# ------------------------------------------------------------------
-icloud_asset_ids = set()
+# -----------------------------
+# Phase 1: Enumerate iCloud assets
+# -----------------------------
+icloud_assets = {}
 
 try:
     for asset in album.photos:
-        icloud_asset_ids.add(asset.id)
+        asset_id = asset.id.replace("/", "_")
+        ext = asset.filename.split(".")[-1].lower()
+        icloud_assets[asset_id] = ext
 except Exception as e:
     log(f"FATAL: Failed while enumerating iCloud photos: {e}")
     sys.exit(1)
 
-log(f"iCloud photo count: {len(icloud_asset_ids)}")
+log(f"iCloud asset count: {len(icloud_assets)}")
 
-# ------------------------------------------------------------------
-# Phase 2: Download + convert new assets
-# ------------------------------------------------------------------
+# -----------------------------
+# Phase 2: Download missing assets
+# -----------------------------
 downloaded = 0
 skipped = 0
 failed = 0
 
 for asset in album.photos:
     asset_id = asset.id.replace("/", "_")
+    local_path = PHOTO_DIR / f"{asset_id}.jpg"
 
-    if asset_id in known_assets:
+    if local_path.exists():
         skipped += 1
         continue
 
-    suffix = Path(asset.filename).suffix.lower()
-    tmp_path = PHOTO_DIR / f"{asset_id}{suffix}"
-    final_path = PHOTO_DIR / f"{asset_id}.jpg"
-
     try:
         log(f"Downloading asset {asset_id} ({asset.filename})")
-        with open(tmp_path, "wb") as f:
-            f.write(asset.download())
+        raw = asset.download()
 
-        # Normalize EVERYTHING to JPG
-        with Image.open(tmp_path) as im:
-            im.convert("RGB").save(
-                final_path,
-                "JPEG",
-                quality=92,
-                subsampling=0
-            )
-
-        tmp_path.unlink(missing_ok=True)
-
-        known_assets[asset_id] = {
-            "file": final_path.name,
-            "added": datetime.now().isoformat(timespec="seconds"),
-        }
+        if asset.filename.lower().endswith(".heic"):
+            img = Image.open(raw)
+            img.save(local_path, format="JPEG", quality=95, subsampling=0)
+        else:
+            with open(local_path, "wb") as f:
+                f.write(raw)
 
         downloaded += 1
-
     except Exception as e:
         failed += 1
         log(f"ERROR: Failed to process {asset.filename}: {e}")
-        if tmp_path.exists():
-            tmp_path.unlink()
 
-# If any downloads failed → NO DELETE PHASE
+# Abort if anything failed
 if failed > 0:
     log(
         f"SYNC ABORTED — download failures detected "
         f"(downloaded={downloaded}, failed={failed})"
     )
-    save_state(state)
     sys.exit(1)
 
 log(
     f"Download phase complete — downloaded={downloaded}, skipped={skipped}"
 )
 
-# ------------------------------------------------------------------
-# Phase 3: Delete orphaned local files 
-# ------------------------------------------------------------------
+# -----------------------------
+# Phase 3: STRICT DELETE MODE
+# -----------------------------
 deleted = 0
 
-orphans = set(known_assets.keys()) - icloud_asset_ids
+valid_filenames = {f"{aid}.jpg" for aid in icloud_assets.keys()}
 
-for asset_id in orphans:
-    fname = known_assets[asset_id]["file"]
-    path = PHOTO_DIR / fname
+for local_file in PHOTO_DIR.iterdir():
+    if not local_file.is_file():
+        continue
 
-    log(f"Deleting orphaned file {fname}")
-    if path.exists():
-        path.unlink()
+    if local_file.name not in valid_filenames:
+        log(f"Deleting orphaned file {local_file.name}")
+        local_file.unlink()
+        deleted += 1
 
-    del known_assets[asset_id]
-    deleted += 1
-
-# ------------------------------------------------------------------
-# Finalize
-# ------------------------------------------------------------------
-save_state(state)
-
+# -----------------------------
+# Final summary
+# -----------------------------
 log(
     "SYNC COMPLETE — "
     f"downloaded={downloaded}, "
