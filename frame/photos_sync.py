@@ -20,11 +20,16 @@ log("Starting iCloud photo sync")
 # -----------------------------
 # Connect to iCloud
 # -----------------------------
+
+COOKIE_DIR = os.environ.get("PYICLOUD_COOKIE_DIRECTORY", "/home/lu/.pyicloud")
+
 try:
     api = PyiCloudService(
         os.environ["ICLOUD_EMAIL"],
-        os.environ["ICLOUD_PASSWORD"]
+        os.environ["ICLOUD_PASSWORD"],
+        cookie_directory=COOKIE_DIR
     )
+    log(f"Using PYICLOUD_COOKIE_DIRECTORY={COOKIE_DIR}")
 except Exception as e:
     log(f"FATAL: Failed to initialize iCloud client: {e}")
     sys.exit(1)
