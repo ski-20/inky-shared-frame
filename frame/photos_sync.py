@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 from pyicloud import PyiCloudService
+from io import BytesIO
 
 from PIL import Image
 import pillow_heif
@@ -97,7 +98,8 @@ for asset in album.photos:
         raw = asset.download()
 
         if asset.filename.lower().endswith(".heic"):
-            img = Image.open(raw)
+            img = Image.open(BytesIO(raw))
+            img = img.convert("RGB")
             img.save(local_path, format="JPEG", quality=95, subsampling=0)
         else:
             with open(local_path, "wb") as f:
