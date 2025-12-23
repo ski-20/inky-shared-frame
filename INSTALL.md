@@ -167,3 +167,14 @@ sudo systemctl start inky-frame
 systemctl status inky-frame
 journalctl -u inky-frame -f
 
+
+1️⃣2️⃣ Troubleshooting
+
+#to trigger a manual sync
+cd ~/inky-shared-frame
+source inkyenv/bin/activate
+set -a
+source .env
+set +a
+python frame/photos_sync.py
+
